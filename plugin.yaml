@@ -1,13 +1,11 @@
-name: hermes-token-speed
-label: Token Speed
-version: 1.1.0
+name: token-speed
+label: Token Speed + Codex Quota
+version: 1.2.0
 author: Ayshinko
 homepage: https://github.com/Ayshinko/hermes-token-speed
-description: >
-  Live decode tokens-per-second chip for the Hermes Desktop status bar: a
-  1-second sliding window while the model is still streaming, tool execution
-  time excluded from decode seconds, UI spinner frames never counted, TTFT
-  tracked, and cumulative totals calibrated against authoritative provider
-  usage at turn end. Desktop-only (desktop/plugin.js); no agent tools, hooks,
-  middleware or env vars.
-tags: [desktop, streaming, benchmark, statusbar]
+description: >-
+  Live decode token speed and task average in the Desktop status bar, plus Codex
+  5-hour and weekly quota through a signed-in dashboard API.
+requires_auth:
+  - openai-codex
+tags: [desktop, streaming, benchmark, statusbar, quota]

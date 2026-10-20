@@ -1,11 +1,16 @@
 # hermes-token-speed
 
 **Live tokens-per-second for [Hermes Agent](https://hermes-agent.nousresearch.com) desktop.**
-A status-bar chip that shows your model's *actual decode speed while it is
-still generating* — not a post-turn average.
+A status-bar plugin that shows your model's *actual decode speed while it is
+still generating*, task-weighted average TPS, cumulative output count, and current Codex quota.
 
-While the model streams: `⚡ 12.4 t/s` (updates ~4×/sec).
-After the turn: `⚡ 13.9 t/s · 4210 tok · 302s` (task-level cumulative, dsh-style).
+## Codex quota chip
+
+The status bar reports remaining Codex five-hour and weekly quota alongside live and average token metrics. Quotas refresh every five minutes and are cached for 60 seconds. The source is OpenAI's undocumented `chatgpt.com/backend-api/wham/usage` endpoint, so availability and response format may change.
+
+Quota calls use Hermes core's `credentialed_provider_request` for `openai-codex`; Hermes attaches the existing OAuth credential and restricts requests to the provider origin. The plugin never reads or stores Codex token files. Enabling the plugin grants this request capability. A Codex sign-in must be configured in the same Hermes profile.
+
+The status chip is ordered: Codex 5h remaining · weekly remaining · Live tok/s · Avg tok/s · cumulative output tokens. Live returns to an em dash when idle; task average and cumulative output remain visible.
 
 ## Why this exists
 
@@ -38,18 +43,11 @@ and openai/codex#54655 — this repo covers Hermes, honestly.
 
 ## Install
 
-1. Create the folder `<HERMES_HOME>/desktop-plugins/token-speed/`
-   - Windows: `%LOCALAPPDATA%\hermes\desktop-plugins\token-speed\`
-   - macOS/Linux: your `$HERMES_HOME/desktop-plugins/token-speed/`
-2. Copy [`plugin.js`](plugin.js) into it.
-3. Done — standalone desktop plugins load by default. If you don't see the
-   `⚡ t/s` chip at the right end of the status bar: `Ctrl+Shift+S` toggles the
-   bar, `⌘K` → **Reload desktop plugins** re-scans.
+1. Install the GitHub plugin package Ayshinko/hermes-token-speed into Hermes; its agent backend retrieves Codex quota through the Hermes credential broker.
+2. Enable the hermes-token-speed agent plugin and Token Speed + Codex Quota desktop plugin in Capabilities → Plugins.
+3. Reload desktop plugins. Codex must already be signed in to the same Hermes profile.
 
-Confirm the plugin is live: open the command palette (`⌘K`), type
-`Token Speed` — you should see **turn report / watch events / reset**.
-Chip missing but commands present → the status bar is hidden or the window is
-too narrow (right-end fields get trimmed first).
+The standalone desktop-only setup still shows Live / Avg speed, but quota needs the agent half enabled.
 
 ## Commands (⌘K)
 
@@ -88,7 +86,7 @@ watcher — fix + one manual ⌘K reload.
 
 ## 中文说明
 
-Hermes 桌面版内置的 tok/s 是"最近 10 个**已完成** API 调用的滚动平均"——一次长
+插件状态栏新增 Codex 五小时/每周额度，以及实时和任务平均 tok/s；Codex 额度通过 Hermes 现有登录代理读取。Hermes 桌面版内置的 tok/s 是"最近 10 个**已完成** API 调用的滚动平均"——一次长
 生成进行中数字冻结，看不到实时速度。本插件把我在 Pi 上两个插件
 （pi-token-speed / pi-dsh-tps）的测量核心移植到 Hermes 桌面插件 SDK：
 1 秒滑动窗口实时读数、同时间戳分片防假尖峰、工具执行时间剔除、UI 转圈动画帧

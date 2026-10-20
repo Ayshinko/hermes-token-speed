@@ -1,4 +1,4 @@
-// Hermes desktop plugin: hermes-token-speed  v1.1.0
+// Hermes desktop plugin: hermes-token-speed  v1.2.0
 // Live decode tokens/sec for the Hermes desktop status bar:
 // 1-second sliding window, tool-time excluded, calibrated against
 // authoritative usage at turn end. Ported from Ayshinko/pi-token-speed
@@ -75,7 +75,7 @@ class Engine {
     this.paused = false
     this.streaming = false; this.t1 = Date.now()
   }
-  decodeSec() { const end = this.streaming ? Date.now() : this.t1; return Math.max((end - this.t0 - this.pausedMs) / 1000, 0.001) }
+  decodeSec() { const end = this.streaming ? Date.now() : this.t1; const paused = this.pausedMs + (this.streaming && this.paused ? end - this.pauseT0 : 0); return Math.max((end - this.t0 - paused) / 1000, 0.001) }
   tpsAvg() { return this.tokens / this.decodeSec() }
   ttftMs() { return this.ttft1 > 0 ? this.ttft1 - this.ttft0 : 0 }
 }
@@ -94,23 +94,56 @@ const sessionTotals = { tokens: 0, decodeSec: 0, responses: 0, turns: 0 }
 let usageAtTurnStart = 0
 let lastLabelPush = 0
 let watchBuf = null
+let codexQuota = null
+let codexQuotaError = false
+let pluginCtx = null
+let quotaInFlight = false
 
+function compactCount(n) {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M'
+  if (n >= 10000) return (n / 1000).toFixed(1) + 'k'
+  return String(Math.round(n))
+}
+function renderStatus() {
+  const q = codexQuota
+  const q5 = q && q.five_hour ? Math.round(q.five_hour.remaining_percent) + '% left' : (codexQuotaError ? '!' : '—')
+  const qw = q && q.weekly ? Math.round(q.weekly.remaining_percent) + '% left' : (codexQuotaError ? '!' : '—')
+  const active = engine.streaming && !engine.paused
+  const live = active ? engine.win.getTps(Date.now()) : 0
+  const tokens = sessionTotals.tokens + (engine.streaming ? engine.tokens : 0)
+  const seconds = sessionTotals.decodeSec + (engine.streaming ? engine.decodeSec() : 0)
+  const avg = tokens > 0 && seconds > 0 ? (tokens / seconds).toFixed(1) : '--'
+  const liveText = active && live > 0 ? live.toFixed(1) : '—'
+  $chip.set('Codex ' + q5 + ' · W ' + qw + ' · ⚡ Live ' + liveText + ' · Avg ' + avg + ' tok/s · ↓' + compactCount(tokens))
+}
+async function refreshCodexQuota() {
+  if (quotaInFlight || !pluginCtx || typeof pluginCtx.rest !== 'function') return
+  quotaInFlight = true
+  try {
+    const q = await pluginCtx.rest('/quota', { timeoutMs: 12000 })
+    if (!q || (!q.five_hour && !q.weekly)) throw new Error('invalid quota result')
+    codexQuota = q
+    codexQuotaError = false
+  } catch (_) {
+    codexQuotaError = true
+  } finally {
+    quotaInFlight = false
+    renderStatus()
+  }
+}
 function pushLive() {
   const now = Date.now()
   if (now - lastLabelPush < THROTTLE_MS) return
   lastLabelPush = now
-  $chip.set('\u26A1 ' + engine.tps.toFixed(1) + ' t/s')
+  renderStatus()
 }
 function pushEnd() {
   sessionTotals.tokens += engine.tokens
   sessionTotals.decodeSec += engine.decodeSec()
   sessionTotals.responses += 1
-  $chip.set('\u26A1 ' + engine.tpsAvg().toFixed(1) + ' t/s \u00B7 ' + sessionTotals.tokens + ' tok \u00B7 ' + sessionTotals.decodeSec.toFixed(0) + 's')
+  renderStatus()
 }
-function pushIdle() {
-  if (sessionTotals.responses === 0) { $chip.set('\u26A1 t/s'); return }
-  $chip.set('\u26A1 ' + (sessionTotals.tokens / Math.max(sessionTotals.decodeSec, 0.001)).toFixed(1) + ' t/s \u00B7 ' + sessionTotals.tokens + ' tok')
-}
+function pushIdle() { renderStatus() }
 
 function extractDeltaText(evt) {
   const p = (evt && evt.payload) || (evt && evt.params) || evt || {}
@@ -124,14 +157,23 @@ const IGNORE = /session\.usage|session\.info|status\.update|notification\.|revie
 
 export default {
   id: 'token-speed',
-  name: 'Token Speed',
+  name: 'Token Speed + Codex Quota',
   register(ctx) {
+    pluginCtx = ctx
+    // Codex usage is retrieved by the signed Hermes backend adapter; never read auth files here.
+    void refreshCodexQuota()
+    ctx.setInterval(() => { void refreshCodexQuota() }, 5 * 60 * 1000)
+    const stopQuotaRefresh = ctx.onEvent('session.usage', () => { void refreshCodexQuota() })
+    ctx.onDispose(stopQuotaRefresh)
+    // Keep the sliding window honest during short pauses between stream events.
+    ctx.setInterval(() => { if (engine.streaming) renderStatus() }, THROTTLE_MS)
+
     // turn boundaries via busy atom
     host.state.busy.listen((busy) => {
       if (busy) {
         usageAtTurnStart = (host.state.focusedUsage.get() || {}).output || 0
         engine.start()
-        $chip.set('\u26A1 \u2026')
+        renderStatus()
       } else {
         if (engine.streaming) {
           engine.stop()
@@ -198,7 +240,7 @@ export default {
       },
       {
         id: 'reset', area: PALETTE_AREA,
-        data: { id: 'token-speed.reset', label: 'Token Speed: reset session totals', keywords: ['tps', 'reset'], run: () => { sessionTotals.tokens = 0; sessionTotals.decodeSec = 0; sessionTotals.responses = 0; $chip.set('') } }
+        data: { id: 'token-speed.reset', label: 'Token Speed: reset session totals', keywords: ['tps', 'reset'], run: () => { sessionTotals.tokens = 0; sessionTotals.decodeSec = 0; sessionTotals.responses = 0; renderStatus() } }
       }
     ])
 

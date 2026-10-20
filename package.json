@@ -1,0 +1,8 @@
+{
+  "name": "token-speed",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/desktop_plugin.test.mjs && python tests/quota_api_test.py"
+  }
+}
