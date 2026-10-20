@@ -4,8 +4,8 @@
 // authoritative usage at turn end. Ported from Ayshinko/pi-token-speed
 // (SlidingWindow + TokenSpeedEngine) and pi-dsh-tps (task-level decode
 // TPS excluding tool wall time). MIT licensed.
-import { host, atom, useValue, PALETTE_AREA } from '@hermes/plugin-sdk'
-const jsx = (type, props) => ({ type, props })
+import { atom, useValue } from '@hermes/plugin-sdk'
+import { jsx } from 'react/jsx-runtime'
 
 const WINDOW_MS = 1000        // pi-token-speed SLIDING_WINDOW_DEFAULT
 const MIN_SPAN = 100          // MIN_SLIDING_WINDOW

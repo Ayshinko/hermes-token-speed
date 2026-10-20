@@ -4,6 +4,7 @@ from __future__ import annotations
 import importlib.util
 import sys
 import threading
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -48,8 +49,8 @@ def test_endpoint_uses_hermes_signed_provider_request_and_caches():
         "primary_window": {"used_percent": 10}, "secondary_window": {"used_percent": 20},
     }})
     with patch.object(api, "credentialed_provider_request", return_value=fake) as request:
-        first = api.codex_quota()
-        second = api.codex_quota()
+        first = asyncio.run(api.codex_quota())
+        second = asyncio.run(api.codex_quota())
     assert first == second
     assert request.call_count == 1
     args, kwargs = request.call_args
@@ -62,7 +63,7 @@ def test_endpoint_does_not_leak_upstream_error_details():
     api._cache = None
     with patch.object(api, "credentialed_provider_request", side_effect=RuntimeError("secret-bearing upstream body")):
         try:
-            api.codex_quota()
+            asyncio.run(api.codex_quota())
         except HTTPException as exc:
             assert exc.status_code == 502
             assert "secret-bearing" not in str(exc.detail)
@@ -80,7 +81,7 @@ def test_endpoint_coalesces_concurrent_cache_misses():
     def worker():
         try:
             barrier.wait()
-            results.append(api.codex_quota())
+            results.append(asyncio.run(api.codex_quota()))
         except Exception as exc:
             failures.append(exc)
     with patch.object(api, "credentialed_provider_request", return_value=fake) as request:

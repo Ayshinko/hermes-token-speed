@@ -51,7 +51,7 @@ def parse_usage(payload: Any) -> dict[str, Any]:
 
 
 @router.get("/quota")
-def codex_quota() -> dict[str, Any]:
+async def codex_quota() -> dict[str, Any]:
     """Return remaining 5-hour and weekly Codex quota, cached briefly."""
     global _cache, _cache_at
     now = time.monotonic()
@@ -65,7 +65,11 @@ def codex_quota() -> dict[str, Any]:
             if _cache is not None and now - _cache_at < _CACHE_SECONDS:
                 return dict(_cache)
         try:
-            response = credentialed_provider_request(
+            # credentialed_provider_request performs blocking HTTP; the route is
+            # async, so keep its event loop free for parallel dashboard work.
+            from asyncio import to_thread
+            response = await to_thread(
+                credentialed_provider_request,
                 "openai-codex", "GET", _ENDPOINT,
                 headers={"Accept": "application/json", "User-Agent": "codex-cli"},
                 timeout=10.0,
