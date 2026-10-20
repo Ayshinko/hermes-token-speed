@@ -4,7 +4,7 @@
 // authoritative usage at turn end. Ported from Ayshinko/pi-token-speed
 // (SlidingWindow + TokenSpeedEngine) and pi-dsh-tps (task-level decode
 // TPS excluding tool wall time). MIT licensed.
-import { atom, useValue } from '@hermes/plugin-sdk'
+import { atom, host, useValue, PALETTE_AREA } from '@hermes/plugin-sdk'
 import { jsx } from 'react/jsx-runtime'
 
 const WINDOW_MS = 1000        // pi-token-speed SLIDING_WINDOW_DEFAULT
@@ -169,7 +169,7 @@ export default {
     ctx.setInterval(() => { if (engine.streaming) renderStatus() }, THROTTLE_MS)
 
     // turn boundaries via busy atom
-    host.state.busy.listen((busy) => {
+    const stopBusy = host.state.busy.listen((busy) => {
       if (busy) {
         usageAtTurnStart = (host.state.focusedUsage.get() || {}).output || 0
         engine.start()
@@ -184,10 +184,12 @@ export default {
       }
     })
 
+    ctx.onDispose(stopBusy)
+
     // raw event tap — real gateway event names confirmed from desktop source
     // (use-message-stream/gateway-event/message-stream.ts + tools.ts):
     //   message.delta / reasoning.delta / thinking.delta / tool.start / tool.generating / tool.complete
-    host.onEvent('*', (evt) => {
+    const stopEvents = host.onEvent('*', (evt) => {
       const type = evt && (evt.type || evt.method) || ''
       if (watchBuf) watchBuf[type] = (watchBuf[type] || 0) + 1
       if (!engine.streaming || !type) return
@@ -198,6 +200,8 @@ export default {
         if (text) { engine.record(countTokens(text)); pushLive() }
       }
     })
+
+    ctx.onDispose(stopEvents)
 
     // status bar chip
     ctx.register({
